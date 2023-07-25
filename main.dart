@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'login.dart';
 import 'register.dart';
+import 'profile.dart';
 
 class MainPage extends StatefulWidget {
   @override
@@ -12,6 +13,15 @@ class MainPage extends StatefulWidget {
 class _MainPageState extends State<MainPage> {
   final TextEditingController _postController = TextEditingController();
   final TextEditingController _replyController = TextEditingController();
+
+  int _currentIndex = 0;
+
+  Stream<QuerySnapshot> _getRepliesForPost(String postId) {
+    return FirebaseFirestore.instance
+        .collection('replies')
+        .where('postId', isEqualTo: postId)
+        .snapshots();
+  }
 
   Future<void> _createPost() async {
     String content = _postController.text.trim();
@@ -27,17 +37,13 @@ class _MainPageState extends State<MainPage> {
       });
       _postController.clear();
     }
-
-    bool _canEdit(String ownerId) {
-      String? currentUserId = FirebaseAuth.instance.currentUser?.uid;
-      return currentUserId == ownerId;
-    }
   }
 
   Future<void> _createReply(String postId) async {
     String content = _replyController.text.trim();
     String? userId = FirebaseAuth.instance.currentUser?.uid;
-    String username = FirebaseAuth.instance.currentUser?.displayName ?? "Unknown User";
+    String username =
+        FirebaseAuth.instance.currentUser?.displayName ?? "Unknown User";
 
     if (content.isNotEmpty && userId != null) {
       await FirebaseFirestore.instance.collection('replies').add({
@@ -50,35 +56,6 @@ class _MainPageState extends State<MainPage> {
       _replyController.clear();
       Navigator.pop(context); // Close the reply dialog
     }
-  }
-
-  Future<void> _showReplyDialog(String postId) async {
-    await showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text("Reply to Post"),
-          content: TextField(
-            controller: _replyController,
-            decoration: InputDecoration(hintText: "Enter your reply"),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                _createReply(postId);
-              },
-              child: Text("Reply"),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
-              child: Text("Cancel"),
-            ),
-          ],
-        );
-      },
-    );
   }
 
   bool _canEdit(String ownerId) {
@@ -116,14 +93,14 @@ class _MainPageState extends State<MainPage> {
               onPressed: () {
                 if (editedContent.isNotEmpty) {
                   _editPost(postId, editedContent);
-                  Navigator.pop(context); // Close the edit dialog
+                  Navigator.pop(context);
                 }
               },
               child: Text("Save"),
             ),
             TextButton(
               onPressed: () {
-                Navigator.pop(context); // Close the edit dialog
+                Navigator.pop(context);
               },
               child: Text("Cancel"),
             ),
@@ -133,10 +110,52 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
-  @override
+  Future<void> _deleteReply(String postId, String replyId) async {
+    await FirebaseFirestore.instance
+        .collection('replies')
+        .doc(replyId)
+        .delete();
+  }
+
+  Widget _buildRepliesList(String postId) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _getRepliesForPost(postId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        } else if (!snapshot.hasData) {
+          return SizedBox.shrink(); // No replies yet
+        } else {
+          final replies = snapshot.data!.docs;
+          return ListView.builder(
+            shrinkWrap: true,
+            itemCount: replies.length,
+            itemBuilder: (context, index) {
+              final reply = replies[index];
+              final replyId = reply.id;
+              final replyUsername = reply['username'];
+              final replyContent = reply['content'];
+              return ListTile(
+                title: Text(replyUsername),
+                subtitle: Text(replyContent),
+                trailing: _canEdit(reply['userId'])
+                    ? IconButton(
+                  onPressed: () => _deleteReply(postId, replyId),
+                  icon: Icon(Icons.delete),
+                )
+                    : null,
+              );
+            },
+          );
+        }
+      },
+    );
+  }
+
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: Colors.blueAccent,
         title: Text("School Help App"),
         actions: [
           IconButton(
@@ -153,7 +172,10 @@ class _MainPageState extends State<MainPage> {
         children: [
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance.collection('posts').orderBy('timestamp', descending: true).snapshots(),
+              stream: FirebaseFirestore.instance
+                  .collection('posts')
+                  .orderBy('timestamp', descending: true)
+                  .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return Center(child: CircularProgressIndicator());
@@ -170,24 +192,48 @@ class _MainPageState extends State<MainPage> {
                       final content = post['content'];
                       final ownerId = post['userId'];
 
-                      return ListTile(
-                        title: Text(username),
-                        subtitle: Text(content),
-                        trailing: _canEdit(ownerId)
-                            ? Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              onPressed: () => _showEditDialog(postId, content),
-                              icon: Icon(Icons.edit),
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ListTile(
+                            title: Text(username),
+                            subtitle: Text(content),
+                            trailing: _canEdit(ownerId)
+                                ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  onPressed: () =>
+                                      _showEditDialog(postId, content),
+                                  icon: Icon(Icons.edit),
+                                ),
+                                IconButton(
+                                  onPressed: () => _deletePost(postId),
+                                  icon: Icon(Icons.delete),
+                                ),
+                              ],
+                            )
+                                : IconButton(
+                              onPressed: () => _showReplyDialog(postId),
+                              icon: Icon(Icons.reply,
+                                color: Colors.lightBlueAccent,
+                              ),
                             ),
-                            IconButton(
-                              onPressed: () => _deletePost(postId),
-                              icon: Icon(Icons.delete),
+                          ),
+                          // Display replies for this post as an ExpansionTile
+                          Container(
+                            color: Colors.lightBlueAccent,
+                            child: ExpansionTile(
+                              title: DefaultTextStyle(
+                                style: TextStyle(color: Colors.white), // Set the text color of the title
+                                child: Text('Replies'),
+                              ),
+                              children: [
+                                _buildRepliesList(postId),
+                              ],
                             ),
-                          ],
-                        )
-                            : null,
+                          ),
+                        ],
                       );
                     },
                   );
@@ -216,6 +262,42 @@ class _MainPageState extends State<MainPage> {
           ),
         ],
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+              context, MaterialPageRoute(builder: (context) => ProfilePage()));
+        },
+        child: Icon(Icons.person),
+      ),
+    );
+  }
+
+  Future<void> _showReplyDialog(String postId) async {
+    await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text("Reply to Post"),
+          content: TextField(
+            controller: _replyController,
+            decoration: InputDecoration(hintText: "Enter your reply"),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                _createReply(postId);
+              },
+              child: Text("Reply"),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: Text("Cancel"),
+            ),
+          ],
+        );
+      },
     );
   }
 }

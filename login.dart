@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'main.dart';
@@ -64,7 +65,7 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.pink,
+        backgroundColor: Colors.blueAccent,
         title: Text("Login"),
       ),
       body: Padding(
@@ -89,7 +90,7 @@ class _LoginPageState extends State<LoginPage> {
               onPressed: _login,
               child: Text("Login"),
               style: ElevatedButton.styleFrom(
-                primary: Colors.pink,
+                primary: Colors.lightBlueAccent,
               ),
             ),
             SizedBox(height: 8),
@@ -99,12 +100,43 @@ class _LoginPageState extends State<LoginPage> {
               },
               child: Text("Don't have an account? Register here."),
               style: TextButton.styleFrom(
-                primary: Colors.pink,
+                primary: Colors.lightBlueAccent,
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _checkDisplayName();
+  }
+
+  Future<void> _checkDisplayName() async {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user != null && user.displayName == null) {
+      // Fetch the display name from your user database and set it
+      // This depends on how you store user information in your database
+      String? displayName = await fetchDisplayNameFromDatabase(user.uid);
+      if (displayName != null) {
+        await user.updateDisplayName(displayName);
+      }
+    }
+  }
+
+  Future<String?> fetchDisplayNameFromDatabase(String uid) async {
+    // Here, you need to fetch the user's display name from your database
+    // This could be Firestore, Realtime Database, or any other backend you use
+    // Return the user's display name if found, or null if not found
+    // Example (using Firestore):
+    DocumentSnapshot<Map<String, dynamic>> snapshot = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    if (snapshot.exists) {
+      return snapshot.data()!['username'];
+    } else {
+      return null;
+    }
   }
 }

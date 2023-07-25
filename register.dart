@@ -54,13 +54,16 @@ class _RegisterPageState extends State<RegisterPage> {
       );
 
       if (userCredential.user != null) {
-        String uid = userCredential.user!.uid; // Add null check here
+        String uid = userCredential.user!.uid;
 
         // Save the username in Firebase Firestore (or Realtime Database) for later retrieval
         await FirebaseFirestore.instance.collection('users').doc(uid).set({
           'username': username,
           // You can add more user-related data here if needed
         });
+
+        // Update the display name on Firebase Authentication
+        await userCredential.user!.updateDisplayName(username);
 
         // Registration success, navigate to the login page.
         Navigator.pushReplacementNamed(context, '/login');
@@ -106,7 +109,7 @@ class _RegisterPageState extends State<RegisterPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.pink,
+        backgroundColor: Colors.blueAccent,
         title: Text("Register"),
       ),
       body: Padding(
@@ -136,7 +139,7 @@ class _RegisterPageState extends State<RegisterPage> {
               onPressed: _register,
               child: Text("Register"),
               style: ElevatedButton.styleFrom(
-                primary: Colors.pink,
+                primary: Colors.lightBlueAccent,
               ),
             ),
             SizedBox(height: 16),
@@ -144,7 +147,7 @@ class _RegisterPageState extends State<RegisterPage> {
               onPressed: _goToLoginPage,
               child: Text("Already have an account? Login"),
               style: TextButton.styleFrom(
-                primary: Colors.pink,
+                primary: Colors.lightBlueAccent,
               ),
             ),
           ],
